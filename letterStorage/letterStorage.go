@@ -19,9 +19,9 @@ func New() LetterStorage {
 func (ls LetterStorage) Add(letter string) {
 	ls.Lock()
 
-	v, ok := ls.letters[letter]
+	numOfLetters, ok := ls.letters[letter]
 	if ok {
-		ls.letters[letter] = v + 1
+		ls.letters[letter] = numOfLetters + 1
 	} else {
 		ls.letters[letter] = 1
 	}
@@ -29,15 +29,15 @@ func (ls LetterStorage) Add(letter string) {
 	ls.Unlock()
 }
 
-func (ls LetterStorage) Join(letterStorage LetterStorage) {
+func (ls LetterStorage) Join(outerLs LetterStorage) {
 	ls.Lock()
 
-	for k, v1 := range letterStorage.letters {
-		v2, ok := ls.letters[k]
+	for innerLetter, outerNumOfLetters := range outerLs.letters {
+		innerNumOfLetters, ok := ls.letters[innerLetter]
 		if ok {
-			ls.letters[k] = v1 + v2
+			ls.letters[innerLetter] = outerNumOfLetters + innerNumOfLetters
 		} else {
-			ls.letters[k] = 1
+			ls.letters[innerLetter] = outerNumOfLetters
 		}
 	}
 
@@ -45,10 +45,10 @@ func (ls LetterStorage) Join(letterStorage LetterStorage) {
 }
 
 func (ls LetterStorage) ToString() string {
-	letters := []string{}
+	var letters []string
 
-	for k := range ls.letters {
-		letters = append(letters, k)
+	for letter := range ls.letters {
+		letters = append(letters, letter)
 	}
 
 	sort.Strings(letters)

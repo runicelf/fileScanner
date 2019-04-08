@@ -11,6 +11,8 @@ import (
 	"sync"
 )
 
+const maxWorkingGoroutines = 100
+
 func main() {
 	if len(os.Args) < 2 {
 		panic("err: no path")
@@ -20,21 +22,33 @@ func main() {
 
 	fileInfo, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		panic("err: path no exist")
+		panic("err: path not exist")
 	}
 
 	if !fileInfo.IsDir() {
 		panic("err: is not dir")
 	}
 
-	wg := sync.WaitGroup{}
 	lettersChannel := make(chan letterStorage.LetterStorage)
-	walkFunc := getWalkFunc(lettersChannel, &wg)
+	semaphore := make(chan int, maxWorkingGoroutines)
+	wgForWalkFunc := sync.WaitGroup{}
 
-	err = filepath.Walk(path, walkFunc)
-	checkErr(err)
+	walkFunc := getWalkFunc(lettersChannel, &wgForWalkFunc, semaphore)
 
-	go closeChannel(lettersChannel, &wg)
+	wgForPrintResult := sync.WaitGroup{}
+	wgForPrintResult.Add(1)
+
+	go printResult(lettersChannel, &wgForPrintResult)
+
+	filepath.Walk(path, walkFunc)
+
+	wgForWalkFunc.Wait()
+	close(lettersChannel)
+	wgForPrintResult.Wait()
+}
+
+func printResult(lettersChannel chan letterStorage.LetterStorage, wg *sync.WaitGroup) {
+	defer wg.Done()
 
 	resultMap := letterStorage.New()
 	for e := range lettersChannel {
@@ -44,16 +58,13 @@ func main() {
 	fmt.Println(resultMap.ToString())
 }
 
-func closeChannel(lettersChannel chan letterStorage.LetterStorage, wg *sync.WaitGroup) {
-	wg.Wait()
-	close(lettersChannel)
-}
-
-func getWalkFunc(lettersChannel chan letterStorage.LetterStorage, wg *sync.WaitGroup) filepath.WalkFunc {
+func getWalkFunc(lettersChannel chan letterStorage.LetterStorage, wg *sync.WaitGroup, semaphore chan int) filepath.WalkFunc {
 	return func(path string, info os.FileInfo, err error) error {
 		wg.Add(1)
+		semaphore <- 0
 		go func() {
 			defer wg.Done()
+			defer func() { <-semaphore }()
 
 			if info.IsDir() {
 				return
